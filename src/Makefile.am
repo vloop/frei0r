@@ -61,6 +61,7 @@ plugin_LTLIBRARIES = \
 	gamma.la \
 	glow.la \
 	glitch0r.la \
+	glitch1.la \
 	grain_extract.la \
 	grain_merge.la \
 	hardlight.la \
@@ -226,6 +227,7 @@ G_la_SOURCES = filter/RGB/G.c
 gamma_la_SOURCES = filter/gamma/gamma.c
 glow_la_SOURCES = filter/glow/glow.c
 glitch0r_la_SOURCES = filter/glitch0r/glitch0r.c
+glitch1_la_SOURCES = filter/glitch1/glitch1.cpp
 hqdn3d_la_SOURCES = filter/denoise/hqdn3d.c
 hueshift0r_la_SOURCES = filter/hueshift0r/hueshift0r.c filter/hueshift0r/matrix.h
 IIRblur_la_SOURCES = filter/blur/IIRblur.c filter/blur/fibe.h
