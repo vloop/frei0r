@@ -17,6 +17,11 @@
  * Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+/* Todo
+ * arbitrary byte re-order pre/post
+ * offset output by -delay so that dry part is off-screen
+ * buffer so that feedback is independant from dry/wet
+ */
 #include "frei0r.hpp"
 
 #include <algorithm>
@@ -35,6 +40,7 @@ union px_t {
 class glitch1 : public frei0r::filter {
 private:
 	f0r_param_double delay_x, delay_y, wet, dry, mode, rotcol;
+	long delay0;
 	unsigned int _width;
 	unsigned int _height;
 	
@@ -53,6 +59,7 @@ public:
 		register_param(dry, "dry", "dry");
 		register_param(mode, "mode", "mode");
 		register_param(rotcol, "rot.col.", "rot.col.");
+		delay0 = 0;
 		_width = width;
 		_height = height;
 	}
@@ -63,30 +70,33 @@ public:
 	                    uint32_t* out,
                         const uint32_t* in) {
 		unsigned char c;
-		long delay;
-		delay = 2 * ((delay_x - 0.5) + (delay_y - 0.5) * double(_height)) * double(_width);
+		long delay, j, k;
+		delay = 2 * ((delay_x - 0.5) * double(_width-1)
+		           + (delay_y - 0.5) * double(_height-1) * double(_width));
 		
-		if (delay>0){
-		  for (int i = 0; i < delay; i++) {
-		    out[i]=in[i];
-		  }
-		} {
-		  for (int i = size - 1; i > size - 1 + delay; i--) {
-		    out[i]=in[i];
-		  }
+		if (delay != delay0){
+		  delay0 = delay;
+		  std::cerr << "Delay:" << delay << '/' << size << ' ' << _width << 'x' << _height;
 		}
 		
-		
-		for (int i = abs(delay); i < size; i++) {
+		for (int i = 0; i < size; i++) {
 			px_t p_src, p_dest;
-			if (delay > 0){
-			  p_src.u = out[i-delay];
-			  p_dest.u = in[i];
+			j = (delay>0) ? i : size -1 - i; // Backwards if required
+			k = j - delay;
+			// trim
+			// p_src.u = 0; // default source if off-screen
+			// if ((k>0) && (k<size)) p_src.u = (i<abs(delay)) ? in[k] : out[k];
+			// wrap
+			while (k >= size) k-=size;
+			while (k < 0) k+=size;
+			if (i<abs(delay)){
+			  p_src.u = in[k]; // Seed from input
+			  p_dest.u = in[j];
 			}else{
-			  p_src.u = out[size - 1 - i + delay];
-			  p_dest.u = in[size - 1 - i];
+			  p_src.u = out[k]; // Feedback from output
+			  p_dest.u = out[j];
 			}
-		
+			
 			// Color rotate
 			switch(int(rotcol*6)){
 			  case 0: // RGB
@@ -117,9 +127,11 @@ public:
 			    p_src.c[2] = p_src.c[1];
 			    p_src.c[1] = p_src.c[0];
 			    p_src.c[0] = c;
+
 			    break;
 			}
-			switch(int(mode*5)){
+			
+			switch(int(mode*6)){
 			  case 0:
 			      // 4-channel = 1 channel per video component, bounded
 			      p_src.c[0]=std::min(float(p_src.c[0])*wet + float(p_dest.c[0])*dry,255.0);
@@ -145,17 +157,29 @@ public:
 			      // Handle as mono sound
 			      p_src.u = p_src.u * wet + p_dest.u * dry;
 			      break;
+			  case 4:
+			      // Handle as mono sound, change byte order
+			      c=p_src.c[0];
+			      p_src.c[0] = p_src.c[1];
+			      p_src.c[1] = p_src.c[2];
+			      p_src.c[2] = p_src.c[3];
+			      p_src.c[3] = c;
+			      p_src.u = p_src.u * wet + p_dest.u * dry;
+			      c=p_src.c[3];
+			      p_src.c[3] = p_src.c[2];
+			      p_src.c[2] = p_src.c[1];
+			      p_src.c[1] = p_src.c[0];
+			      p_src.c[0] = c;
+			      break;
 			  default:
 			      // Handle as stereo sound
 			      p_src.s[0]=p_src.s[0] * wet +p_dest.s[0] * dry;
 			      p_src.s[1]=p_src.s[1] * wet +p_dest.s[1] * dry;
 			      break;
 			}
-			if (delay > 0){
-			  out[i] = p_src.u;
-			}else{
-			  out[size - 1 - i] = p_src.u;
-			}
+			
+			out[j] = p_src.u;
+			
 		  }
 		  
 	}
@@ -163,7 +187,7 @@ public:
 
 
 frei0r::construct<glitch1> plugin("glitch1",
-									"Audio glitch delay",
-									"D-j-a-y, vloop",
-									0,2);
+				  "Audio glitch delay",
+				  "D-j-a-y, vloop",
+				  0,2);
 
